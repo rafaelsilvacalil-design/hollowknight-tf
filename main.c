@@ -1,8 +1,11 @@
 #include "raylib.h"
+#include <stdio.h>
 
-#define WINDOW_HEIGHT 900
-#define WINDOW_WIDTH 1600
-
+#define SCREEN_HEIGHT 900
+#define SCREEN_WIDTH 1600
+#define GRAVITY 1
+#define MOVE_SPEED 8
+#define JUMP_STRENGTH 20
 
 typedef struct {
     Vector2 position;
@@ -10,32 +13,58 @@ typedef struct {
     int vidas;
     int amuletos[6];
     Vector2 tamanho;
+    bool chao;
 }player;
+typedef struct {
+    char m[16][150];
+    }map;
 
         void initplayer(player *p){
-        p->position.x=50.0f;
-        p->position.y=50.0f;
+        p->position.x=64.0f;
+        p->position.y=64.0f;
+        p->velocity.x=00.0f;
+        p->velocity.y=00.0f;
         p->amuletos[0]=4;
-        p->tamanho.x=30;
-        p->tamanho.y=30;
+        p->tamanho.x=32;
+        p->tamanho.y=32;
+        p->chao=false;
+        p->vidas = 5;
 
+        }
+void updateplayer(player *p,int *s){
+    if(IsKeyDown(KEY_D)){
+        p->velocity.x = MOVE_SPEED;
     }
-    void updateplayer(player *p,int *s){
-        if(IsKeyDown(KEY_D)){
-            p->position.x += 10;
-        }
-        if(IsKeyDown(KEY_A)){
-            p->position.x -= 10;
+    else if(IsKeyDown(KEY_A)){
+        p->velocity.x = -MOVE_SPEED;}
+    else p->velocity.x=0;
 
-        }
-        if(IsKeyPressed(KEY_ESCAPE)){
-            *s = 3;
-        }
-        if(IsKeyDown(KEY_O)){
-            *s = 2;
-        }
+    if (IsKeyPressed(KEY_SPACE)&&p->chao)
+        {
+        p->velocity.y = -JUMP_STRENGTH;
+        p->chao = false;}
+    if (IsKeyDown(KEY_S))
+        p->velocity.y += MOVE_SPEED*0.5;
+    p->velocity.y += GRAVITY;
+
+    p->position.x += p->velocity.x;
+    p->position.y += p->velocity.y;
+
+    if(p->position.x - p->tamanho.x/2  <= 0)
+        p->position.x = p->tamanho.x/2;
+    if(p->position.y + 1.5*p->tamanho.y>= SCREEN_HEIGHT){
+        p->position.y = SCREEN_HEIGHT - 1.5*p->tamanho.y;
+        p->velocity.y = 0;
+        p->chao=true;
     }
 
+    if(IsKeyPressed(KEY_ESCAPE)){
+        *s = 3;
+    }
+    if(IsKeyDown(KEY_O)){
+        *s = 2;
+    }
+}
     void updatemenu(int *c,int *s){
         if(*c>=3||*c<0)
             *c=0;
@@ -87,17 +116,17 @@ typedef struct {
         }
         if(IsKeyPressed(KEY_ESCAPE))
             *s=1;
-        if(IsKeyPressed(KEY_ENTER)){
+        if(IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE)){
             if(*c==0)
-                *s=1; //continua
+                *s=1;
             if(*c==1)
-                *s=6; //reinicia fase
+                *s=6;
             if(*c==2)
-                *s=5; //opcoes?
+                *s=5;
             if(*c==3)
-               *s=0; //menu inicial
+               *s=0;
             if(*c==4)
-                *s=4; //quit
+                *s=4;
 
     }}
     void drawoption(int s){
@@ -111,48 +140,50 @@ typedef struct {
     }
 
     void drawplayer(player *p){
-        DrawRectangle(p->position.x,p->position.y,p->tamanho.x,p->tamanho.y,RED);
+        DrawRectangle(p->position.x-0.5*p->tamanho.x,p->position.y+0.5*p->tamanho.x,p->tamanho.x,p->tamanho.y,RED);
     }
 
     int main(){
         int cur_window=0,sel_window=0;
         player p1;
         initplayer(&p1);
-        InitWindow(WINDOW_WIDTH,WINDOW_HEIGHT,"batata");
-        SetExitKey(KEY_NULL);
+        InitWindow(SCREEN_WIDTH,SCREEN_HEIGHT,"jogo");
+        SetExitKey(KEY_HOME);
         SetTargetFPS(60);
         while(!WindowShouldClose()){
             BeginDrawing();
             ClearBackground(PURPLE);
             switch (cur_window){
-                case 0: // menu
+                case 0:
                     updatemenu(&sel_window,&cur_window);
                     drawmenu(sel_window);
 
                     break;
-                case 1: // gameplay
+                case 1:
                     updateplayer(&p1,&cur_window);
                     drawplayer(&p1);
                     break;
-                case 2: // inventario
-                    DrawText("INVENTARIO",WINDOW_WIDTH/2,WINDOW_HEIGHT/2,40,GREEN);
+                case 2:
+                    DrawText("INVENTARIO",SCREEN_WIDTH/2-20,SCREEN_HEIGHT/2-20,40,GREEN);
+                    if(IsKeyPressed(KEY_ESCAPE))
+                        cur_window=1;
                     break;
-                case 3: //pausa
+                case 3:
                     updateoption(&sel_window,&cur_window);
                     drawoption(sel_window);
                     break;
 
                     break;
-                case 4: //quita
+                case 4:
                     EndDrawing();
                     CloseWindow();
 
-                case 5: //configs
-                    DrawText("CONFIGS",WINDOW_WIDTH/2,WINDOW_HEIGHT/2,40,GREEN);
+                case 5:
+                    DrawText("CONFIGS",SCREEN_WIDTH/2,SCREEN_HEIGHT/2,40,GREEN);
                     if(IsKeyPressed(KEY_ESCAPE))
                         cur_window=3;
                     break;
-                case 6: //reinicia a fase
+                case 6:
                     initplayer(&p1);
                     cur_window=1;
             }
@@ -162,4 +193,3 @@ typedef struct {
         CloseWindow();
         return 0;
     }
-
