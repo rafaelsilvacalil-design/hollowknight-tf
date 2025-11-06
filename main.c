@@ -1,12 +1,13 @@
 #include "raylib.h"
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
 #define SCREEN_HEIGHT 900
 #define SCREEN_WIDTH 1600
 #define WIDTH_LIMIT SCREEN_WIDTH*15
 #define GRAVITY 1.6
-#define MOVE_SPEED 30
+#define MOVE_SPEED 40
 #define JUMP_STRENGTH 50
 #define SIZE 128
 
@@ -16,13 +17,18 @@ typedef struct
     Vector2 position;
     Vector2 velocity;
     int vidas;
-    int amuletos[6];
+    bool amuletos[6];
     Vector2 tamanho;
     bool chao;
+    float invtimer;
+    bool inbench;
+    int coins;
+
 } player;
 typedef struct
 {
     char m[22][200];
+    int rows,cols;
 } map;
 
 void initplayer(player *p)
@@ -30,36 +36,69 @@ void initplayer(player *p)
 
     p->velocity.x=00.0f;
     p->velocity.y=00.0f;
-    p->amuletos[0]=4;
-    p->tamanho.x=SIZE;
-    p->tamanho.y=SIZE;
+    p->tamanho.x=SIZE-4;
+    p->tamanho.y=SIZE-4;
     p->chao=false;
     p->vidas = 5;
+    p->invtimer = 0;
+    p->inbench = false;
+    p->coins = 0;
+    for(int i = 0; i<6; i++)
+        p->amuletos[i]=false;
 
 }
 
+void floodfill(map *ma, int i, int j, char mark)
+{
+    if (i < 0 || i >= ma->rows || j < 0 || j >= ma->cols) return; // Use actual dimensions
+
+    if (ma->m[i][j] != ' ' ) return;
+    if (ma->m[i][j] == mark) return;
+    char original = ma->m[i][j];
+    ma->m[i][j] = mark;
+    floodfill(ma, i+1, j, mark);
+    floodfill(ma, i-1, j, mark);
+    floodfill(ma, i, j+1, mark);
+    floodfill(ma, i, j-1, mark);
+
+}
+void markexterior(map *ma)
+{
+    for (int j = 0; j < ma->cols; j++)
+    {
+        floodfill(ma, 0, j, 'E');
+        floodfill(ma, ma->rows - 1, j, 'E');
+    }
+    for (int i = 0; i < ma->rows; i++)
+    {
+        floodfill(ma, i, 0, 'E');
+        floodfill(ma, i, ma->cols - 1, 'E');
+    }
+}
 
 void loadmap(map *mapa, char *filename)
 {
-    FILE *fmap=fopen(filename,"r");
-    for (int i = 0; i < 20; i++)
-    {
-        fgets(mapa->m[i], 180, fmap);
+    FILE *fmap = fopen(filename, "r");
+    mapa->rows = 0;
+    mapa->cols = 0;
 
+    for (int i = 0; i < 22; i++) // Max possible rows
+    {
+        if (fgets(mapa->m[i], 200, fmap) == NULL) break;
+        mapa->rows++;
+        int len = strlen(mapa->m[i]);
+        if (len > mapa->cols) mapa->cols = len;
     }
 
-
+    markexterior(mapa);
     fclose(fmap);
 }
-
 void loadmaps (map *maps)
 {
-    loadmap(&maps[0],"maps/maptest.txt");
-
-
+    loadmap(&maps[0],"maps/lobby.txt");
+    loadmap(&maps[1],"maps/maptest.txt");
+    loadmap(&maps[2],"maps/mapa2.txt");
 }
-
-
 void drawmap(map ma,player *p, Camera2D camera)
 {
     BeginMode2D(camera);
@@ -83,17 +122,55 @@ void drawmap(map ma,player *p, Camera2D camera)
                 DrawRectangle(xsize*j,ysize*i,xsize,ysize,YELLOW);
                 break;
             case 'A': //amuleto
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
                 DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,GREEN);
                 break;
             case 'C': //boss
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
                 DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,PINK);
                 break;
             case 'H'://habilidade
-                DrawRectangle(xsize*j,ysize*i,xsize,ysize,PURPLE);
+                DrawRectangle(xsize*j,ysize*i,xsize,ysize,LIME);
                 break;
 
-            default : //ar
-                DrawRectangle(xsize*j, ysize*i, xsize, ysize, LIGHTGRAY);
+            case 'E': //de fora
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, PURPLE);
+                break;
+            case 'S': //loja
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, GOLD);
+                break;
+            case 'B': // banco
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
+                DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,PINK);
+                break;
+            case '1': // fase 1
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
+                DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,DARKPURPLE);
+                DrawText("1",xsize*(0.4+j), ysize*(0.4+i), 60, GREEN);
+                break;
+            case '2': // fase 2
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
+                DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,DARKPURPLE);
+                DrawText("2",xsize*(0.4+j), ysize*(0.4+i), 60, GREEN);
+                break;
+            case '3': // fase 3
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
+                DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,DARKPURPLE);
+                DrawText("3",xsize*(0.4+j), ysize*(0.4+i), 60, GREEN);
+                break;
+            case '4': // fase 4
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
+                DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,DARKPURPLE);
+                DrawText("4",xsize*(0.4+j), ysize*(0.4+i), 60, GREEN);
+                break;
+            case '5': // fase 5
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
+                DrawCircle(xsize*(0.5+j),ysize*(0.5+i),xsize/2,DARKPURPLE);
+                DrawText("5",xsize*(0.4+j), ysize*(0.4+i), 60, GREEN);
+                break;
+
+            default: //de dentro
+                DrawRectangle(xsize*j, ysize*i, xsize, ysize, BEIGE);
                 break;
 
             }
@@ -101,62 +178,188 @@ void drawmap(map ma,player *p, Camera2D camera)
     }
     EndMode2D();
 }
-void initmap(map ma, player *p) //determina a posicao inicial do jogador
+int initmap(map ma, player *p) //determina a posicao inicial do jogador e o numero de inimigos
 {
     char temp;
+    int nEn;
     for(int i = 0; i < 22; i++)
     {
         for(int j = 0; j < 200; j++)
         {
             temp = ma.m[i][j];
+            if(temp=='M')
+                nEn++;
             if(temp == 'J')
             {
                 p->position.x = j * SIZE + SIZE/2;
                 p->position.y = i * SIZE + SIZE/2;
-                return;
+                return nEn;
             }
         }
     }
+    return nEn;
 }
-bool checkhitbox(map ma, player p)
+void PlayerColi(player *p, map ma)
 {
-    // Calculate player's top-left corner first
-    float top_left_x = p.position.x - SIZE/2;
-    float top_left_y = p.position.y - SIZE/2;
-
-
-    int top_i = floor(top_left_y / SIZE);
-    int left_j = floor(top_left_x / SIZE);
-    int bottom_i = ((top_left_y + SIZE - 0.01) / SIZE);
-    int right_j = floor((top_left_x + SIZE - 1) / SIZE);
-
-    Rectangle pr = {top_left_x+3, top_left_y+20, SIZE-3, SIZE-20};
-
-
-    for (int k = top_i; k <= bottom_i; k++) {
-        for (int l = left_j; l <= right_j; l++) {
-            if (k < 0 || k >= 22 || l < 0 || l >= 200) continue; // Bounds check
-
-            Rectangle tr = {l * SIZE, k * SIZE, SIZE, SIZE};
-            if (CheckCollisionRecs(tr, pr)) {
-
-                if (ma.m[k][l] == 'P' || ma.m[k][l] == 'M' || ma.m[k][l] == 'C') {
-                    return false;
+    p->position.x += p->velocity.x;
+    Rectangle playerRectX =
+    {
+        p->position.x - p->tamanho.x / 2.0f,
+        p->position.y - p->tamanho.y / 2.0f,
+        p->tamanho.x,
+        p->tamanho.y
+    };
+    int startRow = floor(playerRectX.y / SIZE);
+    int endRow = floor((playerRectX.y + playerRectX.height - 1) / SIZE);
+    int startCol = floor(playerRectX.x / SIZE);
+    int endCol = floor((playerRectX.x + playerRectX.width - 1) / SIZE);
+    for (int i = startRow; i <= endRow; i++)
+    {
+        for (int j = startCol; j <= endCol; j++)
+        {
+            if (i < 0 || i >= 22 || j < 0 || j >= 200) continue;
+            char tileType = ma.m[i][j];
+            if (tileType == 'P' || tileType == 'M' || tileType == 'C')
+            {
+                Rectangle tileRect = {j * SIZE, i * SIZE, SIZE, SIZE};
+                if (CheckCollisionRecs(playerRectX, tileRect))
+                {
+                    if (p->velocity.x > 0)
+                    {
+                        p->position.x = tileRect.x - p->tamanho.x / 2.0f;
+                    }
+                    else if (p->velocity.x < 0)
+                    {
+                        p->position.x = tileRect.x + SIZE + p->tamanho.x / 2.0f;
+                    }
+                    p->velocity.x = 0;
                 }
             }
         }
     }
-    return true;
+    p->position.y += p->velocity.y;
+    Rectangle playerRectY =
+    {
+        p->position.x - p->tamanho.x / 2.0f,
+        p->position.y - p->tamanho.y / 2.0f,
+        p->tamanho.x,
+        p->tamanho.y
+    };
+    startRow = floor(playerRectY.y / SIZE);
+    endRow = floor((playerRectY.y + playerRectY.height - 1) / SIZE);
+    startCol = floor(playerRectY.x / SIZE);
+    endCol = floor((playerRectY.x + playerRectY.width - 1) / SIZE);
+    p->chao = false;
+    for (int i = startRow; i <= endRow; i++)
+    {
+        for (int j = startCol; j <= endCol; j++)
+        {
+            if (i < 0 || i >= 22 || j < 0 || j >= 200) continue;
+            char tileType = ma.m[i][j];
+            if (tileType == 'P')
+            {
+                Rectangle tileRect = {j * SIZE, i * SIZE, SIZE, SIZE};
+                if (CheckCollisionRecs(playerRectY, tileRect))
+                {
+                    if (p->velocity.y > 0)
+                    {
+                        p->position.y = tileRect.y - p->tamanho.y / 2.0f;
+                        p->chao = true;
+                    }
+                    else if (p->velocity.y < 0)
+                    {
+                        p->position.y = tileRect.y + SIZE + p->tamanho.y / 2.0f;
+                    }
+                    p->velocity.y = 0;
+                }
+            }
+        }
+    }
+}
+
+void CheckObjectCollisions(player *p, map *ma[], int *curmap)
+{
+    Rectangle playerRect =
+    {
+        p->position.x - p->tamanho.x / 2.0f,
+        p->position.y - p->tamanho.y / 2.0f,
+        p->tamanho.x,
+        p->tamanho.y
+    };
+    int startRow = floor(playerRect.y / SIZE);
+    int endRow = floor((playerRect.y + playerRect.height - 1) / SIZE);
+    int startCol = floor(playerRect.x / SIZE);
+    int endCol = floor((playerRect.x + playerRect.width - 1) / SIZE);
+    for (int i = startRow; i <= endRow; i++)
+    {
+        for (int j = startCol; j <= endCol; j++)
+        {
+            if (i < 0 || i >= ma[*curmap]->rows || j < 0 || j >= ma[*curmap]->cols) continue;
+            char tileType = ma[*curmap]->m[i][j];
+            Rectangle tileRect = {j * SIZE, i * SIZE, SIZE, SIZE};
+            if (CheckCollisionRecs(playerRect, tileRect))
+            {
+                switch (tileType)
+                {
+                case 'A':
+                    if (p->chao && IsKeyPressed(KEY_W))
+                    {
+                    }
+                    break;
+                case 'M':
+                case 'C':
+                    if (p->invtimer<= 0.0f)
+                    {
+                        p->vidas--;
+                        p->invtimer = 1.0f;
+                        p->position.x=-p->velocity.x;
+                        p->position.y=-p->velocity.y;
+                    }
+                    break;
+                case '1':
+                    if (p->chao && IsKeyPressed(KEY_W))
+                    {
+                        initmap(*ma[1],p);
+                        *curmap = 1;
+                    }
+                    break;
+                case '2':
+                    if (p->chao && IsKeyPressed(KEY_W))
+                    {
+                        initmap(*ma[2], p);
+                        *curmap = 2;
+                    }
+                    break;
+                case '3':
+                    if (p->chao && IsKeyPressed(KEY_W))
+                    {
+                        initmap(*ma[3], p);
+                        *curmap = 3;
+                    }
+                    break;
+                case '4':
+                    if (p->chao && IsKeyPressed(KEY_W))
+                    {
+                        initmap(*ma[4], p);
+                        *curmap = 4;
+                    }
+                    break;
+                case '5':
+                    if (p->chao && IsKeyPressed(KEY_W))
+                    {
+                        initmap(*ma[5], p);
+                        *curmap = 5;
+                    }
+                    break;
+                }
+            }
+        }
+    }
 }
 
 
-
-
-
-
-void updateplayer(player *p,int *s, map map)
+void updateplayer(player *p,int *s, map map[], int *curmap)
 {
-    //input
     if(IsKeyDown(KEY_D))
     {
         p->velocity.x = MOVE_SPEED;
@@ -181,31 +384,13 @@ void updateplayer(player *p,int *s, map map)
     {
         *s = 2;
     }
-
     p->velocity.y += GRAVITY;
+    p->invtimer-=0.02;
 
-    //colisao
-    player tempx = *p;
-    tempx.position.x+=tempx.velocity.x;
-    if(checkhitbox(map,tempx)&&p->position.x>=0&&p->position.x<200*SIZE)
-        p->position.x += p->velocity.x;
-    else
-        p->velocity.x=0;
-       player tempy = *p;
-    tempy.position.y += tempy.velocity.y;
-    if(checkhitbox(map, tempy) && p->position.y >= 0 && p->position.y < 16*SIZE)
-    {
-        p->position.y += p->velocity.y;
-        p->chao = false;
-    }
-    else {
-        if(p->velocity.y > 0)
-            p->chao = true;
-        p->velocity.y = 0;
-    }
-
-
+    PlayerColi(p, map[*curmap]);
+    CheckObjectCollisions(p, &map, curmap);
 }
+
 void updatemenu(int *c,int *s, bool *init)
 {
     if(*c>=3||*c<0)
@@ -246,7 +431,7 @@ void drawmenu(int s)
 {
 
     DrawText("comecar jogo", 300, 20, 30, (s==0)?RED:GREEN);
-    DrawText("a decidir", 300, 40, 30, (s==1)?RED:GREEN);
+    DrawText("controles?", 300, 40, 30, (s==1)?RED:GREEN);
     DrawText("sair do jogo", 300, 60, 30, (s==2)?RED:GREEN);
 
 }
@@ -302,17 +487,18 @@ void drawplayer(player *p,Camera2D camera)
 {
     BeginMode2D(camera);
     DrawRectangle(p->position.x - 0.5 * p->tamanho.x, p->position.y - 0.5f * p->tamanho.y, p->tamanho.x, p->tamanho.y, RED);
+    DrawText(TextFormat("vidas: %d", p->vidas), p->position.x-SCREEN_WIDTH+10, p->position.y-SCREEN_HEIGHT+10, 20, RED);
     EndMode2D();
 }
 
 int main()
 {
-    int cur_window=0,sel_window=0;
+    int cur_window=0,sel_window=0,nEn;
     bool init=false;
     map maps[6];
     player p1;
     initplayer(&p1);
-
+    int cur_map = 0;
     SetTargetFPS(60);
     Camera2D camera = {0};
     camera.target = p1.position;
@@ -323,17 +509,16 @@ int main()
     };
     InitWindow(SCREEN_WIDTH,SCREEN_HEIGHT,"jogo");
     SetExitKey(KEY_HOME);
+    SetTargetFPS(60);
     while(!WindowShouldClose())
     {
-
         if(init)
         {
             loadmaps(maps);
-            initmap(maps[0],&p1);
+            nEn=initmap(maps[cur_map],&p1);
             initplayer(&p1);
             init=false;
         }
-
         BeginDrawing();
         ClearBackground(PURPLE);
         switch (cur_window)
@@ -344,11 +529,10 @@ int main()
 
             break;
         case 1:
-            updateplayer(&p1,&cur_window, maps[0]);
+            updateplayer(&p1,&cur_window, maps,&cur_map);
             camera.target.x = (p1.position.x < SCREEN_WIDTH/2.0f) ? SCREEN_WIDTH/2.0f : p1.position.x;
             camera.target.y = (p1.position.y < SCREEN_HEIGHT/2.0f) ? SCREEN_HEIGHT/2.0f : p1.position.y;
-
-            drawmap(maps[0], &p1, camera);
+            drawmap(maps[cur_map], &p1, camera);
             drawplayer(&p1,camera);
             break;
         case 2:
@@ -361,7 +545,6 @@ int main()
             drawoption(sel_window);
             break;
 
-            break;
         case 4:
             EndDrawing();
             CloseWindow();
@@ -375,7 +558,6 @@ int main()
             init=true;
             cur_window=1;
         }
-
         EndDrawing();
     }
     CloseWindow();
