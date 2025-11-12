@@ -10,6 +10,8 @@
 #define MOVE_SPEED 40
 #define JUMP_STRENGTH 50
 #define SIZE 128
+#define MAX_ROWS 16
+#define MAX_COLS 160
 
 
 typedef struct
@@ -27,7 +29,7 @@ typedef struct
 } player;
 typedef struct
 {
-    char m[22][200];
+    char m[MAX_ROWS][MAX_COLS+1];
     int rows,cols;
 } map;
 
@@ -50,7 +52,7 @@ void initplayer(player *p)
 
 void floodfill(map *ma, int i, int j, char mark)
 {
-    if (i < 0 || i >= ma->rows || j < 0 || j >= ma->cols) return; // Use actual dimensions
+    if (i < 0 || i >= ma->rows || j < 0 || j >= ma->cols-1) return;
 
     if (ma->m[i][j] != ' ' ) return;
     if (ma->m[i][j] == mark) return;
@@ -78,26 +80,50 @@ void markexterior(map *ma)
 
 void loadmap(map *mapa, char *filename)
 {
+    for (int i = 0; i < MAX_ROWS; i++) {
+    for (int j = 0; j < MAX_COLS; j++) {
+        mapa->m[i][j] = ' '; //sem isso tava dando problema
+    }
+    mapa->m[i][MAX_COLS] = '\0';
+}
     FILE *fmap = fopen(filename, "r");
     mapa->rows = 0;
     mapa->cols = 0;
 
-    for (int i = 0; i < 22; i++) // Max possible rows
+    for (int i = 0; i < MAX_ROWS; i++) // Max possible rows
     {
-        if (fgets(mapa->m[i], 200, fmap) == NULL) break;
+        if (fgets(mapa->m[i], MAX_COLS, fmap) == NULL) break;
+
         mapa->rows++;
         int len = strlen(mapa->m[i]);
+        if (mapa->m[i][len - 1] == '\n') mapa->m[i][len - 1] = '\0';
         if (len > mapa->cols) mapa->cols = len;
     }
+    mapa->cols-=1;
 
     markexterior(mapa);
     fclose(fmap);
 }
-void loadmaps (map *maps)
+void loadmaps (map *maps, int n)
 {
-    loadmap(&maps[0],"maps/lobby.txt");
-    loadmap(&maps[1],"maps/maptest.txt");
-    loadmap(&maps[2],"maps/mapa2.txt");
+    switch (n)
+    {
+    case 0:
+        loadmap(maps,"maps/lobby.txt");
+        break;
+    case 1:
+        loadmap(maps,"maps/maptest.txt");
+        break;
+    case 2:
+        loadmap(maps,"maps/mapa2.txt");
+        break;
+    case 3:
+        loadmap(maps,"maps/mapa3.txt");
+        break;
+    case 4:
+        loadmap(maps,"maps/mapa4.txt");
+
+    }
 }
 void drawmap(map ma,player *p, Camera2D camera)
 {
@@ -105,9 +131,9 @@ void drawmap(map ma,player *p, Camera2D camera)
     char temp;
     float xsize=SIZE;
     float ysize=SIZE;
-    for(int i = 0; i<16; i++)
+    for(int i = 0; i<ma.rows; i++)
     {
-        for(int j = 0; j<150; j++)
+        for(int j = 0; j<ma.cols; j++)
         {
             temp=ma.m[i][j];
             switch(temp)
@@ -182,9 +208,9 @@ int initmap(map ma, player *p) //determina a posicao inicial do jogador e o nume
 {
     char temp;
     int nEn;
-    for(int i = 0; i < 22; i++)
+    for(int i = 0; i < ma.rows; i++)
     {
-        for(int j = 0; j < 200; j++)
+        for(int j = 0; j < ma.cols; j++)
         {
             temp = ma.m[i][j];
             if(temp=='M')
@@ -210,16 +236,16 @@ void PlayerColi(player *p, map ma)
         p->tamanho.y
     };
     int startRow = floor(playerRectX.y / SIZE);
-    int endRow = floor((playerRectX.y + playerRectX.height - 1) / SIZE);
+    int endRow = floor((playerRectX.y + playerRectX.height) / SIZE);
     int startCol = floor(playerRectX.x / SIZE);
-    int endCol = floor((playerRectX.x + playerRectX.width - 1) / SIZE);
+    int endCol = floor((playerRectX.x + playerRectX.width) / SIZE);
     for (int i = startRow; i <= endRow; i++)
     {
         for (int j = startCol; j <= endCol; j++)
         {
-            if (i < 0 || i >= 22 || j < 0 || j >= 200) continue;
+            if (i < 0 || i >= ma.rows || j < 0 || j >= ma.cols) continue;
             char tileType = ma.m[i][j];
-            if (tileType == 'P' || tileType == 'M' || tileType == 'C')
+            if (tileType == 'P'||(p->invtimer>0&&(tileType=='C'||tileType=='M'))) // caso parede ou quando nao leva dano de inimigo
             {
                 Rectangle tileRect = {j * SIZE, i * SIZE, SIZE, SIZE};
                 if (CheckCollisionRecs(playerRectX, tileRect))
@@ -246,15 +272,15 @@ void PlayerColi(player *p, map ma)
         p->tamanho.y
     };
     startRow = floor(playerRectY.y / SIZE);
-    endRow = floor((playerRectY.y + playerRectY.height - 1) / SIZE);
+    endRow = floor((playerRectY.y + playerRectY.height) / SIZE);
     startCol = floor(playerRectY.x / SIZE);
-    endCol = floor((playerRectY.x + playerRectY.width - 1) / SIZE);
+    endCol = floor((playerRectY.x + playerRectY.width) / SIZE);
     p->chao = false;
     for (int i = startRow; i <= endRow; i++)
     {
         for (int j = startCol; j <= endCol; j++)
         {
-            if (i < 0 || i >= 22 || j < 0 || j >= 200) continue;
+            if (i < 0 || i >= ma.rows || j < 0 || j >= ma.cols) continue;
             char tileType = ma.m[i][j];
             if (tileType == 'P')
             {
@@ -277,7 +303,7 @@ void PlayerColi(player *p, map ma)
     }
 }
 
-void CheckObjectCollisions(player *p, map *ma[], int *curmap)
+void CheckObjectCollisions(player *p, map ma, int *curmap, bool *init)
 {
     Rectangle playerRect =
     {
@@ -287,15 +313,15 @@ void CheckObjectCollisions(player *p, map *ma[], int *curmap)
         p->tamanho.y
     };
     int startRow = floor(playerRect.y / SIZE);
-    int endRow = floor((playerRect.y + playerRect.height - 1) / SIZE);
+    int endRow = floor((playerRect.y + playerRect.height) / SIZE);
     int startCol = floor(playerRect.x / SIZE);
-    int endCol = floor((playerRect.x + playerRect.width - 1) / SIZE);
+    int endCol = floor((playerRect.x + playerRect.width) / SIZE);
     for (int i = startRow; i <= endRow; i++)
     {
         for (int j = startCol; j <= endCol; j++)
         {
-            if (i < 0 || i >= ma[*curmap]->rows || j < 0 || j >= ma[*curmap]->cols) continue;
-            char tileType = ma[*curmap]->m[i][j];
+            if (i < 0 || i >= ma.rows || j < 0 || j >= ma.cols) continue;
+            char tileType = ma.m[i][j];
             Rectangle tileRect = {j * SIZE, i * SIZE, SIZE, SIZE};
             if (CheckCollisionRecs(playerRect, tileRect))
             {
@@ -304,50 +330,62 @@ void CheckObjectCollisions(player *p, map *ma[], int *curmap)
                 case 'A':
                     if (p->chao && IsKeyPressed(KEY_W))
                     {
+                        p->amuletos[0]=true;
                     }
                     break;
                 case 'M':
                 case 'C':
-                    if (p->invtimer<= 0.0f)
+                    if (p->invtimer<=0 )
                     {
                         p->vidas--;
                         p->invtimer = 1.0f;
-                        p->position.x=-p->velocity.x;
-                        p->position.y=-p->velocity.y;
+                        float tileCenterX = tileRect.x + tileRect.width / 2.0f;
+                        float playerCenterX = p->position.x;
+
+                        if (playerCenterX < tileCenterX)
+                        {
+                            p->velocity.x = -200;
+                        }
+                        else
+                        {
+                            p->velocity.x = 200;
+                        }
+                        p->velocity.y = -10;
                     }
+
                     break;
                 case '1':
                     if (p->chao && IsKeyPressed(KEY_W))
                     {
-                        initmap(*ma[1],p);
+                        *init= true;
                         *curmap = 1;
                     }
                     break;
                 case '2':
                     if (p->chao && IsKeyPressed(KEY_W))
                     {
-                        initmap(*ma[2], p);
+                        *init=true;
                         *curmap = 2;
                     }
                     break;
                 case '3':
                     if (p->chao && IsKeyPressed(KEY_W))
                     {
-                        initmap(*ma[3], p);
+                        *init= true;
                         *curmap = 3;
                     }
                     break;
                 case '4':
                     if (p->chao && IsKeyPressed(KEY_W))
                     {
-                        initmap(*ma[4], p);
+                        *init= true;
                         *curmap = 4;
                     }
                     break;
                 case '5':
                     if (p->chao && IsKeyPressed(KEY_W))
                     {
-                        initmap(*ma[5], p);
+                        *init= true;
                         *curmap = 5;
                     }
                     break;
@@ -358,7 +396,7 @@ void CheckObjectCollisions(player *p, map *ma[], int *curmap)
 }
 
 
-void updateplayer(player *p,int *s, map map[], int *curmap)
+void updateplayer(player *p,int *s, map map, int *curmap,bool *init)
 {
     if(IsKeyDown(KEY_D))
     {
@@ -384,11 +422,16 @@ void updateplayer(player *p,int *s, map map[], int *curmap)
     {
         *s = 2;
     }
+    if(IsKeyDown(KEY_L))
+    {
+        p->vidas=0;
+    }
     p->velocity.y += GRAVITY;
-    p->invtimer-=0.02;
-
-    PlayerColi(p, map[*curmap]);
-    CheckObjectCollisions(p, &map, curmap);
+    if(p->invtimer>0) p->invtimer-=0.02;
+    CheckObjectCollisions(p, map, curmap, init);
+    PlayerColi(p, map);
+    if(p->vidas<=0)
+        *s=8;
 }
 
 void updatemenu(int *c,int *s, bool *init)
@@ -437,18 +480,20 @@ void drawmenu(int s)
 }
 void updateoption(int *c,int *s)
 {
+    int maxop=5;
+
     if(IsKeyPressed(KEY_W))
     {
         if(*c<=0)
         {
-            *c=4;
+            *c=maxop;
         }
         else
             (*c)--;
     }
     if(IsKeyPressed(KEY_S))
     {
-        if(*c>=4)
+        if(*c>=maxop)
         {
             *c=0;
         }
@@ -468,6 +513,8 @@ void updateoption(int *c,int *s)
         if(*c==3)
             *s=0;
         if(*c==4)
+            *s=10;
+        if(*c==5)
             *s=4;
 
     }
@@ -479,7 +526,8 @@ void drawoption(int s)
     DrawText("reinicia", 300, 40, 20, (s==1)?RED:GREEN);
     DrawText("configuracoes", 300, 60, 20, (s==2)?RED:GREEN);
     DrawText("retornar ao menu", 300, 80, 20, (s==3)?RED:GREEN);
-    DrawText("sair", 300, 100, 20, (s==4)?RED:GREEN);
+    DrawText("menu", 300, 100, 20, (s==4)?RED:GREEN);
+    DrawText("sair", 300, 120, 20, (s==5)?RED:GREEN);
 
 }
 
@@ -495,12 +543,13 @@ int main()
 {
     int cur_window=0,sel_window=0,nEn;
     bool init=false;
-    map maps[6];
+    map maps;
     player p1;
     initplayer(&p1);
     int cur_map = 0;
     SetTargetFPS(60);
     Camera2D camera = {0};
+    float deathtimer=0;
     camera.target = p1.position;
     camera.zoom=0.5;
     camera.offset = (Vector2)
@@ -514,49 +563,71 @@ int main()
     {
         if(init)
         {
-            loadmaps(maps);
-            nEn=initmap(maps[cur_map],&p1);
-            initplayer(&p1);
+            loadmaps(&maps,cur_map);
+            nEn=initmap(maps,&p1);
+            p1.velocity.y=0;
             init=false;
         }
         BeginDrawing();
         ClearBackground(PURPLE);
         switch (cur_window)
         {
-        case 0:
+        case 0://menu inicial
             updatemenu(&sel_window,&cur_window,&init);
             drawmenu(sel_window);
 
             break;
-        case 1:
-            updateplayer(&p1,&cur_window, maps,&cur_map);
+        case 1://jogo
+            updateplayer(&p1,&cur_window, maps,&cur_map,&init);
             camera.target.x = (p1.position.x < SCREEN_WIDTH/2.0f) ? SCREEN_WIDTH/2.0f : p1.position.x;
             camera.target.y = (p1.position.y < SCREEN_HEIGHT/2.0f) ? SCREEN_HEIGHT/2.0f : p1.position.y;
-            drawmap(maps[cur_map], &p1, camera);
+            drawmap(maps, &p1, camera);
             drawplayer(&p1,camera);
             break;
-        case 2:
+        case 2://inventario (amuletos)
             DrawText("INVENTARIO",SCREEN_WIDTH/2-20,SCREEN_HEIGHT/2-20,40,GREEN);
             if(IsKeyPressed(KEY_ESCAPE))
                 cur_window=1;
             break;
-        case 3:
+        case 3://opcoes (esc)
             updateoption(&sel_window,&cur_window);
             drawoption(sel_window);
             break;
 
-        case 4:
+        case 4://quita
             EndDrawing();
             CloseWindow();
-
-        case 5:
+            break;
+        case 5://configs
             DrawText("CONFIGS",SCREEN_WIDTH/2,SCREEN_HEIGHT/2,40,GREEN);
             if(IsKeyPressed(KEY_ESCAPE))
                 cur_window=3;
             break;
-        case 6:
+        case 6://reinicia fase
             init=true;
             cur_window=1;
+            break;
+        case 8://tela de morte
+            if(deathtimer<=1)
+            {
+                ClearBackground(BLACK);
+                DrawText("MORREU OTARIO", 150, SCREEN_HEIGHT/2-100, 150, RED);
+                deathtimer += GetFrameTime();
+            }
+            if(deathtimer>1)
+            {
+                deathtimer=0;
+                cur_map=0;
+                initplayer(&p1);
+                init=true;
+                cur_window=1;
+            }
+            break;
+        case 10://volta pro menu
+            cur_map=0;
+            init=true;
+            cur_window=1;
+            break;
         }
         EndDrawing();
     }
